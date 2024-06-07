@@ -10,7 +10,7 @@ training and interfence source.
 
 The annotated dataset contains about 03h44min of broadcast news, with 605 
 dialogues for the Test set. The dataset can be downloaded at the following 
-URL: [https://www.ina.fr/recherche/dataset-project](https://www.ina.fr/recherche/dataset-project), under the name `NewsTopic2023`.
+URL: [https://www.ina.fr/recherche/dataset-project](https://www.ina.fr/recherche/dataset-project), under the name `is24_news_topic`.
 
 ### Evaluation scripts
 
