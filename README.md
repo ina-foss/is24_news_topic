@@ -32,7 +32,7 @@ The results will be saved inside `PRED_FOLDER` folder, with the name
 ```json
 {
 	"DIALOGUE_ID_1": {
-		"text": "input text for that dialogue (this field is not required in your output file, but it allow you to easily browse the file.)",
+		"text": "input text for that dialogue (this field is not required in your output file, but it allow you to easily browse the file while reading the predicted output, and manually see if what your model predicted)",
 		"class__ARTS/CULTURE/ENTERTAINMENT": false,
 		"class__COMMERCIAL": false,
 		"class__CRIME/LAW/JUSTICE": true,
