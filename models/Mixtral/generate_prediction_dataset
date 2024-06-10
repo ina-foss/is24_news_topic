@@ -1,0 +1,207 @@
+#!/usr/bin/env python3
+
+import argparse
+
+parser = argparse.ArgumentParser(
+    description='Script to generate the dataset which will be used to ' \
+    'evaluate with the eval script and also to generate a valid dataset ' \
+    'file for the finetuning of BERT models.'
+)
+parser.add_argument(
+    '--input_json_dir', required=True, type=str,
+    help='Directory of input JSON files.'
+)
+parser.add_argument(
+    '--output_directory', required=True, type=str,
+    help='Output directory that will contain the predictions.'
+)
+parser.add_argument(
+    '--output_set_name', default='predictions', type=str,
+    help='Name of the output set (JSON file).'
+)
+
+args = parser.parse_args()
+print(args)
+
+################################################################################
+
+mixtral_norm_classes = {
+    'arts/culture/entertainment': 'ARTS/CULTURE/ENTERTAINMENT',
+    'arts, culture, entertainment': 'ARTS/CULTURE/ENTERTAINMENT',
+    'entertainment': 'ARTS/CULTURE/ENTERTAINMENT',
+    'culture': 'ARTS/CULTURE/ENTERTAINMENT',
+    "Arts, culture, et spectacles": "ARTS/CULTURE/ENTERTAINMENT",
+    '01000000': 'ARTS/CULTURE/ENTERTAINMENT',
+
+    'crime/law/justice': 'CRIME/LAW/JUSTICE',
+    'crime, law, justice': 'CRIME/LAW/JUSTICE',
+    'crime': 'CRIME/LAW/JUSTICE',
+    'justice': 'CRIME/LAW/JUSTICE',
+    "Police et justice": "CRIME/LAW/JUSTICE",
+    '02000000': "CRIME/LAW/JUSTICE",
+
+    'disaster/accident': 'DISASTER/ACCIDENT',
+    'disaster, accident': 'DISASTER/ACCIDENT',
+    'disaster': 'DISASTER/ACCIDENT',
+    "Désastres et accidents": "DISASTER/ACCIDENT",
+    '03000000': "DISASTER/ACCIDENT",
+
+    'economy/business/finance': 'ECONOMY/BUSINESS/FINANCE',
+    'economy, business, finance': 'ECONOMY/BUSINESS/FINANCE',
+    'economy, buisness, finance': 'ECONOMY/BUSINESS/FINANCE',
+    'economy': 'ECONOMY/BUSINESS/FINANCE',
+    "Economie et finances": "ECONOMY/BUSINESS/FINANCE",
+    '04000000': "ECONOMY/BUSINESS/FINANCE",
+
+    'education': 'EDUCATION',
+    "Education": "EDUCATION",
+    '05000000': "EDUCATION",
+
+    'environmental_issue': 'ENVIRONMENTAL_ISSUE',
+    'environmental issue': 'ENVIRONMENTAL_ISSUE',
+    'environmental': 'ENVIRONMENTAL_ISSUE',
+    "Environnement": "ENVIRONMENTAL_ISSUE",
+    '06000000': "ENVIRONMENTAL_ISSUE",
+
+    'health': 'HEALTH',
+    "Santé": "HEALTH",
+    '07000000': "HEALTH",
+
+    'labour': 'LABOUR',
+    'labor': 'LABOUR',
+    "Social": "LABOUR",
+    '09000000': "LABOUR",
+
+    'lifestyle/leisure': 'LIFESTYLE/LEISURE',
+    'lifestyle, leisure': 'LIFESTYLE/LEISURE',
+    'lifestyle and leisure': 'LIFESTYLE/LEISURE',
+    'lifestyle': 'LIFESTYLE/LEISURE',
+    "Vie quotidienne et loisirs": "LIFESTYLE/LEISURE",
+    '10000000': "LIFESTYLE/LEISURE",
+
+    'politics': 'POLITICS',
+    "Politique": "POLITICS",
+    "11000000": "POLITICS",
+
+    'religion/belief': 'RELIGION/BELIEF',
+    'religion, belief': 'RELIGION/BELIEF',
+    'religion and belief': 'RELIGION/BELIEF',
+    'religion': 'RELIGION/BELIEF',
+    "Religion et croyance": "RELIGION/BELIEF",
+    '12000000': "RELIGION/BELIEF",
+
+    'science/technology': 'SCIENCE/TECHNOLOGY',
+    'technology': 'SCIENCE/TECHNOLOGY',
+    'science': 'SCIENCE/TECHNOLOGY',
+    'science, technology': 'SCIENCE/TECHNOLOGY',
+    'science and technology': 'SCIENCE/TECHNOLOGY',
+    'science': 'SCIENCE/TECHNOLOGY',
+    "Science et technologie": "SCIENCE/TECHNOLOGY",
+    '13000000': "SCIENCE/TECHNOLOGY",
+
+    'social_issue': 'SOCIAL_ISSUE',
+    'social issue': 'SOCIAL_ISSUE',
+    'social': 'SOCIAL_ISSUE',
+    "Société": "SOCIAL_ISSUE",
+    '14000000': "SOCIAL_ISSUE",
+
+    'sport': 'SPORT',
+    'sports': 'SPORT',
+    "Sport": "SPORT",
+    '15000000': "SPORT",
+
+    'urest/conflicts/war': 'UNREST/CONFLICTS/WAR',
+    'urest, conflicts and war': 'UNREST/CONFLICTS/WAR',
+    'unrest/conflicts/war': 'UNREST/CONFLICTS/WAR',
+    'unrest, conflicts and war': 'UNREST/CONFLICTS/WAR',
+    'conflicts': 'UNREST/CONFLICTS/WAR',
+    "Guerres et conflits": "UNREST/CONFLICTS/WAR",
+    '16000000': "UNREST/CONFLICTS/WAR",
+
+    'weather': 'WEATHER',
+    "Météo": "WEATHER",
+    '17000000': "WEATHER",
+
+    'commercial': 'COMMERCIAL',
+
+    'other': 'OTHER',
+    'unkown': 'OTHER',
+    "Gens animaux insolite": "OTHER",
+    '08000000': 'OTHER'
+}
+
+def normalize_mixtral_class(
+    c,
+    return_other_non_allowed=False, warn=False, only_allowed=False
+):
+    if isinstance(c, list):
+        return [
+            y for y in [
+                normalize_mixtral_class(
+                    x,
+                    return_other_non_allowed=return_other_non_allowed,
+                    warn=warn,
+                    only_allowed=only_allowed
+                ) for x in c
+            ] if y is not None
+        ]
+    if c in mixtral_norm_classes:
+        return mixtral_norm_classes[c]
+
+    if warn:
+        print(f'Unkown class {c}.')
+
+    if only_allowed:
+        return None
+    elif return_other_non_allowed:
+        return mixtral_norm_classes['other']
+    else:
+        return c
+
+
+allowed_classes = set(mixtral_norm_classes.values())
+classes = [f'class__{c}' for c in sorted(allowed_classes)]
+
+import os
+import glob
+import json
+import tqdm
+
+import pandas as pd
+
+input_files = glob.glob(os.path.join(args.input_json_dir, '*.json'))
+
+output = pd.DataFrame(columns=[*classes]).astype(
+    {c: bool for c in classes}
+)
+
+for f in tqdm.tqdm(input_files):
+    dialogue_id = os.path.basename(f)
+    if dialogue_id.endswith('.json'):
+        dialogue_id = dialogue_id[:-len('.json')]
+    if dialogue_id.endswith('.txt'):
+        dialogue_id = dialogue_id[:-len('.txt')]
+
+    with open(f, 'r') as f:
+        try:
+            content = json.load(f)
+        except json.decoder.JSONDecodeError:
+            print(f'ERROR: cannot decode {f}')
+
+        for c in content:
+            normalized = normalize_mixtral_class(
+                c, return_other_non_allowed=True
+            )
+            output.loc[dialogue_id, f"class__{normalized}"] = True
+
+output = output.notna()
+output = output.to_dict(orient='index')
+
+output_file = os.path.join(
+    args.output_directory, f"{args.output_set_name}.json"
+)
+
+with open(output_file, "w") as f:
+    json.dump(output, f, ensure_ascii=False, indent='\t')
+
+print(f"Saved {output_file=}.")

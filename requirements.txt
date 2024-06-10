@@ -2,3 +2,4 @@ datasets
 transformers
 pandas
 tqdm
+openai # for the openai-API compatible server used for Mixtral
