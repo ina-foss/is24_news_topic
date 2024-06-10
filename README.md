@@ -63,6 +63,24 @@ The results will be saved inside `PRED_FOLDER` folder, with the name
 The source code of training and inference of the models presented in the paper 
 are included in the folder `models/` (`models/BERT` and `models/Mixtral`).
 
+#### BERT finetuning
+
+The script to finetune all models presented in the paper is in 
+`models/BERT/train_all`. It calls the `train` script. To generate the 
+predictions of a specific model, use `models/BERT/predict`. You can then 
+use `evaluation/eval` to get metric scores of your model.
+
+#### Mixtral
+
+The prompt used for the Mixtral model is in the file `models/Mixtral/prompt.txt`.
+Use the script `models/Mixtral/inference_mixtral` to generate the outputs of 
+Mixtral (or an other model) base on this prompt and input dialogues. Then, 
+call `parse_safe_json` to convert the output of the model into a valid JSON 
+format, which you can then use with generate_prediction_dataset to create a 
+valid training/validation/testing dataset. You then can use `evaluation/eval` 
+to evaluate Mixtral response if the inference was on the dataset dialogues, 
+or `models/BERT/train` to finetune BERT on these annotations.
+
 ## Installation 
 
 You need `python3`, `pip3`.
