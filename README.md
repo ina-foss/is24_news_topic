@@ -37,6 +37,14 @@ TODO: TO_COME
 The source code of training and inference of the models presented in the paper 
 are included in the folder `models/` (`models/BERT` and `models/Mixtral`).
 
+## Installation 
+
+You need `python3`, `pip3`.
+
+```bash
+pip3 install -r requirements.txt
+```
+
 ## Citation
 
 If you use this corpus or the source code of this repository, please cite the 

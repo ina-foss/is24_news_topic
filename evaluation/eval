@@ -1,0 +1,200 @@
+#!/usr/bin/env python3
+
+import argparse
+
+parser = argparse.ArgumentParser(
+    description='Tool used to evaluate the performances of a model ' \
+    'predictions relative to the dataset annotations.'
+)
+parser.add_argument(
+    '--reference_dataset', required=True, type=str,
+    help='Path to the original reference dataset folder.'
+)
+parser.add_argument(
+    '--prediction', required=True, type=argparse.FileType('r'),
+    help='Predictions from the models in JSON format.'
+)
+parser.add_argument(
+    '--subset', required=True, type=str,
+    choices=['validation', 'test'],
+    help='Subset to evaluate.'
+)
+
+args = parser.parse_args()
+
+################################################################################
+
+import os
+import json
+import datetime
+import collections
+
+import numpy as np
+import pandas as pd
+
+################################################################################
+#                           PREPARING THE DATASET                              #
+################################################################################
+
+reference_file = os.path.join(args.reference_dataset, f"{args.subset}.json")
+if not os.path.exists(reference_file):
+    raise FileNotFoundError(
+        f"The dataset reference for {args.subset=} cannot be found at " \
+        "{reference_file}."
+    )
+
+reference = pd.read_json(reference_file, orient='index')
+prediction = pd.read_json(args.prediction, orient='index')
+
+reference_dialogues = set(reference.index)
+prediction_dialogues = set(prediction.index)
+
+allowed_classes = set(reference.iloc[0].classes.keys())
+
+if reference_dialogues != prediction_dialogues:
+    raise ValueError(
+        "Reference dialogues are not the same as prediction dialogues.\n" \
+        f" - Total reference dialogues: {len(reference_dialogues)}\n" \
+        f" - Total prediction dialogues: {len(prediction_dialogues)}\n" \
+        f" - In common dialogues : {len(reference_dialogues & prediction_dialogues)}\n" \
+        f"Make sure you are using the correct --subset [validation/test] " \
+        f"and that you returned the correct dialogues ids in your prediction."
+    )
+
+################################################################################
+#                            EVALUATION METRICS                                #
+################################################################################
+
+def compute_confusion_matrix(
+        ref,
+        pred,
+        classes=allowed_classes,
+        return_num_processed=False
+):
+    mat = collections.defaultdict(lambda: {'tp': 0, 'tn': 0, 'fp': 0, 'fn': 0})
+    num_processed_samples = 0
+
+    for index, row in ref.iterrows():
+        num_processed_samples += 1
+        for c in classes:
+            predicted = pred.loc[index, f"class__{c}"]
+            score = row.classes[c]
+            if predicted:
+                if score == 0:
+                    mat[c]['fp'] += 1
+                elif score == 1:
+                    mat[c]['tp'] += 1
+                elif score == 0.5:
+                    mat[c]['tp'] += score
+                    mat[c]['fp'] += score
+                else:
+                    raise ValueError("weird.")
+            else:
+                if score == 0:
+                    mat[c]['tn'] += 1
+                elif score == 1:
+                    mat[c]['fn'] += 1
+                elif score == 0.5:
+                    mat[c]['tn'] += score
+                    mat[c]['fn'] += score
+                else:
+                    raise ValueError("weird.")
+
+    mat = pd.DataFrame.from_dict(mat, orient='index')
+    if return_num_processed:
+        return mat, num_processed_samples
+    else:
+        return mat
+
+def average_metric(mat, met, average, metric):
+    if average is None:
+        return met
+    elif average == 'macro':
+        return met.mean()
+    elif average == 'micro':
+        return metric(mat.sum(), average=None)
+    elif average == 'all':
+        return {
+            avg: average_metric(mat, met, avg, metric)
+            for avg in [None, 'micro', 'macro']
+        }
+    else:
+        raise ValueError(average)
+
+def precision(mat, average=None):
+    _precision = mat['tp'] / (mat['tp'] + mat['fp'])
+
+    # 1.0 to precision when no predicted examples
+    if isinstance(_precision, pd.Series):
+        _precision = _precision.fillna(value=1.0)
+    else:
+        _precision = np.nan_to_num(_precision, nan=1.0)
+
+    return average_metric(
+        mat,
+        _precision,
+        average=average, metric=precision
+    )
+
+def recall(mat, average=None):
+    _recall = mat['tp'] / (mat['tp'] + mat['fn'])
+    assert not np.isnan(_recall).any(), \
+        f"Recall cannot have a NaN. That would mean an label has no occurence" \
+        " on the test set."
+    return average_metric(
+        mat,
+        _recall,
+        average=average, metric=recall
+    )
+
+def f1(mat, average=None):
+    p, r = precision(mat), recall(mat)
+    _f1 = 2 * (p * r) / (p + r)
+
+    if isinstance(_f1, pd.Series):
+        _f1 = _f1.fillna(value=0.0)
+    else:
+        _f1 = np.nan_to_num(_f1, nan=0.0)
+
+    return average_metric(
+        mat,
+        _f1,
+        average=average, metric=f1
+    )
+
+def all_metrics(mat, average=None):
+    return {
+        k: globals()[k](mat, average=average)
+        for k in ['f1', 'precision', 'recall']
+    }
+
+confusion = compute_confusion_matrix(
+    ref=reference, pred=prediction,
+)
+
+micro = all_metrics(confusion, average='micro')
+macro = all_metrics(confusion, average='macro')
+per_class = all_metrics(confusion, average=None)
+
+print(f"Micro: {micro}")
+print(f"Macro: {macro}")
+
+output_file = os.path.join(
+    os.path.dirname(args.prediction.name), 'results.json'
+)
+
+with open(output_file, 'w') as f:
+    json.dump({
+        'now': datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S'),
+        'num_reference_samples': len(reference),
+        'num_predicted_samples': len(prediction),
+        'micro': micro,
+        'macro': macro,
+        'per_class': {
+            metric: per_class[metric].to_dict()
+            for metric in per_class
+        },
+        'args': str(args)
+    }, f, indent='\t', ensure_ascii=False)
+
+print(f"Outputs saved to {output_file=}.")

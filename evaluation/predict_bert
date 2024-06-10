@@ -1,0 +1,159 @@
+#!/usr/bin/env python3
+
+import argparse
+
+parser = argparse.ArgumentParser(
+    description='Tool used to generate the predictions of a BERT model.'
+)
+parser.add_argument(
+    '--reference_dataset', required=True, type=str,
+    help='Path to the original reference dataset folder.'
+)
+parser.add_argument(
+    '--subset', required=True, type=str,
+    choices=['validation', 'test'],
+    help='Subset to predict.'
+)
+parser.add_argument(
+    '--model_path', required=True, type=str,
+    help='Path of the model to use for prediction.'
+)
+parser.add_argument(
+    '--output_dir', required=True, type=str,
+    help='Output directory to save the results in.'
+)
+parser.add_argument(
+    '--lowercase_text', action='store_true',
+    help='Apply lowercase to all input text. Should match what was use when ' \
+    'training / finetuning.'
+)
+parser.add_argument(
+    '--device', default='cpu',
+    help='Device to predict on.'
+)
+args = parser.parse_args()
+print(args)
+
+################################################################################
+
+import os
+import json
+import torch
+import datasets
+import transformers
+
+import numpy as np
+import pandas as pd
+
+################################################################################
+#               LOADING THE MODEL, CONFIG AND TOKENIZER                        #
+################################################################################
+
+with open(f'{args.model_path}/config.json') as f:
+    tokenizer_name = json.load(f)['_name_or_path']
+
+output_dir = os.path.join(
+    args.output_dir,
+    args.model_path.replace('/', '__'),
+    args.subset,
+)
+os.makedirs(output_dir, exist_ok=True)
+
+# preparing the models
+model = transformers.AutoModelForSequenceClassification.from_pretrained(
+    args.model_path,
+).to(args.device)
+
+if 'flaubert' in model.config.architectures[0].lower():
+    model.sequence_summary.summary_type = 'mean'
+model.config.max_length = 256
+
+tokenizer = transformers.AutoTokenizer.from_pretrained(
+    tokenizer_name
+)
+
+# evaluating on the annotator test set
+trainer = transformers.Trainer(
+    model,
+    args=torch.load(f'{args.model_path}/training_args.bin'),
+    data_collator=transformers.DefaultDataCollator(),
+)
+
+allowed_classes = set(trainer.model.config.id2label.values())
+classes = [f'class__{c}' for c in sorted(allowed_classes)]
+
+def sigmoid(x):
+   return 1/(1 + np.exp(-x))
+
+def get_preds_ids(prediction):
+    prediction = sigmoid(prediction)
+    return np.argwhere(prediction > 0.5).reshape(-1)
+
+def tokenize_function(examples):
+    return tokenizer(
+        examples["whisper_text"],
+        padding="max_length",
+        truncation=True,
+        max_length=model.config.max_length
+    )
+
+def get_preds_ids(prediction):
+    prediction = sigmoid(prediction)
+    return np.argwhere(prediction > 0.5).reshape(-1)
+
+def get_classes_names(model, ids):
+    return set(map(lambda x: model.config.id2label[x], ids))
+
+################################################################################
+#                           PREPARING THE DATASET                              #
+################################################################################
+
+# preparing the data
+reference_file = os.path.join(args.reference_dataset, f"{args.subset}.json")
+if not os.path.exists(reference_file):
+    raise FileNotFoundError(
+        f"The dataset reference for {args.subset=} cannot be found at " \
+        "{reference_file}."
+    )
+reference = pd.read_json(reference_file, orient='index')
+
+if args.lowercase_text:
+    reference['whisper_text'] = reference['whisper_text'].str.lower()
+    # hf_dataset = hf_dataset.map(lambda x: {'whisper_text': x['whisper_text'].lower()})
+
+hf_dataset = datasets.Dataset.from_pandas(reference)
+
+tokenized_hf_dataset = hf_dataset.map(
+    tokenize_function, batched=True, batch_size=1000
+)
+
+################################################################################
+#                       PREDICTING AND SAVING RESULTS                          #
+################################################################################
+
+preds = trainer.predict(tokenized_hf_dataset)
+output = pd.DataFrame(columns=['text', *classes]).astype(
+    {c: bool for c in classes}
+)
+
+for (sample_id, sample), pred in zip(reference.iterrows(), preds.predictions):
+    output.loc[sample_id, 'text'] = sample['whisper_text']
+    for c in allowed_classes:
+        output.loc[sample_id, f'class__{c}'] = False
+
+    for c in get_classes_names(trainer.model, get_preds_ids(pred)):
+        output.loc[sample_id, f'class__{c}'] = True
+
+output = output.to_dict(orient='index')
+with open(f"{output_dir}/predictions.json", "w") as f:
+    json.dump(
+        output, f,
+        ensure_ascii=False, indent='\t'
+    )
+
+with open(f"{output_dir}/model-config.json", "w") as f:
+    json.dump(
+        trainer.model.config.to_dict(), f,
+        ensure_ascii=False, indent='\t'
+    )
+
