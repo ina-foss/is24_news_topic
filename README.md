@@ -18,18 +18,44 @@ The scripts to eval your own models are included in the folder `evaluation/`.
 You will need an original copy of the dataset (see above.).
 
 You may use the following script:
+
 ```bash
-source_dataset=PATH_TO_THE_ORIGINAL_UNZIPPED_DATASET
-predictions=PATH_TO_YOUR_PREDICTION_FOLDER
 evaluation/eval \
-	--reference $source_dataset \
-	--prediction $predictions \
+	--reference ORIGINAL_DATASET_FOLDER \
+	--prediction PRED_FOLDER/predictions.json \
 	--subset dev # dev or test
 ```
-The results will be saved inside `$predictions` folder. You need to format your
-predictions into the following format:
-```
-TODO: TO_COME
+
+The results will be saved inside `PRED_FOLDER` folder, with the name
+`results.json`. You need to format your predictions into the following format:
+
+```json
+{
+	"DIALOGUE_ID_1": {
+		"text": "input text for that dialogue (this field is not required in your output file, but it allow you to easily browse the file.)",
+		"class__ARTS/CULTURE/ENTERTAINMENT": false,
+		"class__COMMERCIAL": false,
+		"class__CRIME/LAW/JUSTICE": true,
+		"class__DISASTER/ACCIDENT": false,
+		"class__ECONOMY/BUSINESS/FINANCE": false,
+		"class__EDUCATION": false,
+		"class__ENVIRONMENTAL_ISSUE": false,
+		"class__HEALTH": false,
+		"class__LABOUR": false,
+		"class__LIFESTYLE/LEISURE": false,
+		"class__OTHER": false,
+		"class__POLITICS": false,
+		"class__RELIGION/BELIEF": false,
+		"class__SCIENCE/TECHNOLOGY": false,
+		"class__SOCIAL_ISSUE": false,
+		"class__SPORT": false,
+		"class__UNREST/CONFLICTS/WAR": true,
+		"class__WEATHER": false
+	},
+	"DIALOGUE_ID_2": {
+		"..."
+	}
+}
 ```
 
 ### Models
