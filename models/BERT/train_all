@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+
+now=$(date '+%Y-%m-%d_%H:%M:%S')
+echo $now
+
+script="python3 models/BERT/train --now $now"
+
+# replace the followins paths with the correct paths to the mixtral and
+# annotation datasets. For the annotation-trained model, we pass the same
+# set as training and validation sets, the script will then parition it into
+# a sub-training and sub-validation sets.
+data_parent_dir="/data/experiments/ARCOM/2024/data"
+dataset_train_mixtral="$data_parent_dir/train_flaubert-2024-03-06_16:52:24/"
+dataset_train_annotations="$data_parent_dir/eval_devtest_flaubert_with_dup"
+dataset_validation="$data_parent_dir/eval_devtest_flaubert_with_dup"
+
+output_parent_dir="/data/experiments/ARCOM/2024/models"
+
+########################
+# train on annotations #
+########################
+
+train_on_annotations="--train_dataset $train_on_annotations --train_subset validation --validation_dataset $dataset_validation --validation_subset validation --validation_every_steps 10 --num_train_epochs 100 --output_dir $output_dir/trainers/annotations"
+
+# flaubert-base
+$script --model_path "flaubert/flaubert_base_uncased" --lowercase_text $train_on_annotations
+$script --model_path "flaubert/flaubert_base_cased" $train_on_annotations
+$script --model_path "flaubert/flaubert_large_cased" $train_on_annotations
+
+# flaubert-oral
+$script --model_path "nherve/flaubert-oral-asr" --lowercase_text $train_on_annotations
+$script --model_path "nherve/flaubert-oral-asr_nb" --lowercase_text $train_on_annotations
+$script --model_path "nherve/flaubert-oral-mixed" --lowercase_text $train_on_annotations
+$script --model_path "nherve/flaubert-oral-ft" --lowercase_text $train_on_annotations
+
+# camembert
+$script --model_path "almanach/camembert-base" $train_on_annotations
+$script --model_path "almanach/camembert-large" $train_on_annotations
+
+####################
+# train on mixtral #
+####################
+
+train_on_mixtral="--train_dataset $dataset_train_mixtral --validation_dataset $dataset_validation --validation_subset validation --num_train_epochs 3 --output_dir $output_dir/trainers/mixtral"
+
+# flaubert-base
+$script --model_path "flaubert/flaubert_base_uncased" --lowercase_text $train_on_mixtral
+$script --model_path "flaubert/flaubert_base_cased" $train_on_mixtral
+$script --model_path "flaubert/flaubert_large_cased" $train_on_mixtral
+
+# flaubert-oral
+$script --model_path "nherve/flaubert-oral-asr" --lowercase_text $train_on_mixtral
+$script --model_path "nherve/flaubert-oral-asr_nb" --lowercase_text $train_on_mixtral
+$script --model_path "nherve/flaubert-oral-mixed" --lowercase_text $train_on_mixtral
+$script --model_path "nherve/flaubert-oral-ft" --lowercase_text $train_on_mixtral
+
+# camembert
+$script --model_path "almanach/camembert-base" $train_on_mixtral
+$script --model_path "almanach/camembert-large" $train_on_mixtral
