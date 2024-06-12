@@ -94,5 +94,12 @@ pip3 install -r requirements.txt
 If you use this corpus or the source code of this repository, please cite the 
 following article:
 ```bib
-TODO: TO_COME
+@inproceedings{pelloininterspeech24,
+    title = {Automatic Classification of News Subjects in Broadcast News: Application to a Gender Bias Representation Analysis},
+    author = {Valentin Pelloin and Lena Dodson and \'Emile Chapuis and Nicolas Hervé and David Doukhan},
+    booktitle = {Proc. InterSpeech 2024},
+    month = 9,
+    year = 2024,
+    address = "Kos Island, Greece",
+}
 ```
