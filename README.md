@@ -103,3 +103,7 @@ following article:
     address = "Kos Island, Greece",
 }
 ```
+
+## CREDITS
+
+This work has been partially funded by the [French National Research Agency](https://anr.fr) under the Gender Equality Monitor (ANR-19-CE38-0012) and Pantagruel (ANR-23-IAS1-0001) projects.
